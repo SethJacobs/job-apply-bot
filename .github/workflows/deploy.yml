@@ -9,6 +9,10 @@ permissions:
   contents: read
   packages: write
 
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
@@ -24,11 +28,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # derive a lowercase owner for GHCR paths
+      # Lowercase the owner for GHCR image paths (required)
       - name: Compute lowercase owner
-        run: echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+        run: echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
 
-      # Backend
+      # Backend image
       - name: Build & push backend
         uses: docker/build-push-action@v5
         with:
@@ -39,7 +43,7 @@ jobs:
             ghcr.io/${{ env.OWNER_LC }}/job-apply-bot-final-backend:latest
             ghcr.io/${{ env.OWNER_LC }}/job-apply-bot-final-backend:${{ github.sha }}
 
-      # Frontend
+      # Frontend image
       - name: Build & push frontend
         uses: docker/build-push-action@v5
         with:
@@ -50,7 +54,7 @@ jobs:
             ghcr.io/${{ env.OWNER_LC }}/job-apply-bot-final-frontend:latest
             ghcr.io/${{ env.OWNER_LC }}/job-apply-bot-final-frontend:${{ github.sha }}
 
-      # Playwright (optional)
+      # Playwright image (optional)
       - name: Build & push playwright
         uses: docker/build-push-action@v5
         with:
@@ -92,32 +96,50 @@ jobs:
           port: ${{ secrets.SSH_PORT || 22 }}
           script_stop: true
           script: |
-            set -e
-            DOMAIN="${{ secrets.DOMAIN }}"
-            EMAIL="${{ secrets.EMAIL }}"
-            cd "${{ secrets.DEPLOY_PATH }}"
+            set -euo pipefail
 
+            DOMAIN='${{ secrets.DOMAIN }}'
+            EMAIL='${{ secrets.EMAIL }}'
+            DEPLOY_PATH_RAW='${{ secrets.DEPLOY_PATH }}'
+
+            # Sanitize DEPLOY_PATH: strip CRs and trailing whitespace/newlines
+            DEPLOY_PATH="$(printf '%s' "$DEPLOY_PATH_RAW" | tr -d '\r' | sed -e 's/[[:space:]]\+$//')"
+            echo "➡ DEPLOY_PATH: [$DEPLOY_PATH]"
+
+            # Ensure path exists and owned by current user
+            sudo mkdir -p "$DEPLOY_PATH"
+            sudo chown "$USER":"$USER" "$DEPLOY_PATH"
+
+            echo "➡ Listing DEPLOY_PATH contents:"
+            ls -la "$DEPLOY_PATH" || true
+            echo "➡ Looking for compose files:"
+            find "$DEPLOY_PATH" -maxdepth 2 -type f -name 'docker-compose*.yml' -print || true
+
+            # Install Docker (and Compose plugin) if missing
             if ! command -v docker >/dev/null 2>&1; then
               curl -fsSL https://get.docker.com | sudo sh
             fi
 
-            # optional GHCR login if your packages are private
-            if [ -n "${{ secrets.GHCR_USERNAME }}" ] && [ -n "${{ secrets.GHCR_TOKEN }}" ]; then
-              echo "${{ secrets.GHCR_TOKEN }}" | sudo docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
+            # Optional GHCR login if your packages are private
+            if [ -n '${{ secrets.GHCR_USERNAME }}' ] && [ -n '${{ secrets.GHCR_TOKEN }}' ]; then
+              echo '${{ secrets.GHCR_TOKEN }}' | sudo docker login ghcr.io -u '${{ secrets.GHCR_USERNAME }}' --password-stdin
             fi
 
-            sudo docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-            sudo docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+            # Use ABSOLUTE compose file paths (no reliance on cd)
+            COMPOSE="-f $DEPLOY_PATH/docker-compose.yml -f $DEPLOY_PATH/docker-compose.prod.yml"
 
-            if ! sudo docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T frontend \
-              test -f /etc/letsencrypt/live/${DOMAIN}/fullchain.pem; then
+            sudo docker compose $COMPOSE pull
+            sudo docker compose $COMPOSE up -d
 
-              sudo docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm certbot \
+            # First-run cert issuance (works with your HTTP-only bootstrap config)
+            if ! sudo docker compose $COMPOSE exec -T frontend test -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"; then
+              sudo docker compose $COMPOSE run --rm certbot \
                 certonly --webroot -w /var/www/certbot \
-                -d ${DOMAIN} --email ${EMAIL} --agree-tos --no-eff-email
-
-              sudo docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T frontend nginx -s reload || true
+                -d "${DOMAIN}" --email "${EMAIL}" --agree-tos --no-eff-email
+              sudo docker compose $COMPOSE exec -T frontend nginx -s reload || true
             fi
 
+            # Health checks
+            curl -I --max-time 10 "http://${DOMAIN}"  || true
             curl -I --max-time 10 "https://${DOMAIN}" || true
             curl -I --max-time 10 "https://${DOMAIN}/api/jobs" || true
