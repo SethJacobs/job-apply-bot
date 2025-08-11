@@ -71,7 +71,17 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Upload repo via SCP
+    # Prove the files are actually in the runner before SCP
+    - name: Verify workspace contents
+      run: |
+        set -euxo pipefail
+        pwd
+        ls -la
+        find . -maxdepth 2 -name 'docker-compose*' -print
+        test -f docker-compose.yml
+        test -f docker-compose.prod.yml
+
+    - name: Upload repo via SCP (send entire repo)
       uses: appleboy/scp-action@v0.1.7
       with:
         host: ${{ secrets.SSH_HOST }}
@@ -79,11 +89,7 @@ jobs:
         key: ${{ secrets.SSH_KEY }}
         port: ${{ secrets.SSH_PORT || 22 }}
         source: |
-          docker-compose.yml
-          docker-compose.prod.yml
-          frontend/**
-          backend/**
-          playwright-service/**
+          .
         target: /home/ubuntu/job-apply-bot-final
         rm: true
         overwrite: true
@@ -100,6 +106,7 @@ jobs:
         script_stop: true
         script: |
           set -euo pipefail
+
           DOMAIN='${{ secrets.DOMAIN }}'
           EMAIL='${{ secrets.EMAIL }}'
           DEPLOY_PATH='/home/ubuntu/job-apply-bot-final'
