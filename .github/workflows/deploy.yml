@@ -7,10 +7,7 @@ on:
 
 permissions:
   contents: read
-  packages: write   # push to GHCR
-
-env:
-  IMAGE_NS: ghcr.io/SethJacobs
+  packages: write
 
 jobs:
   build-and-push:
@@ -27,6 +24,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # derive a lowercase owner for GHCR paths
+      - name: Compute lowercase owner
+        run: echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+
       # Backend
       - name: Build & push backend
         uses: docker/build-push-action@v5
@@ -35,8 +36,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE_NS }}/job-apply-bot-final-backend:latest
-            ${{ env.IMAGE_NS }}/job-apply-bot-final-backend:${{ github.sha }}
+            ghcr.io/${{ env.OWNER_LC }}/job-apply-bot-final-backend:latest
+            ghcr.io/${{ env.OWNER_LC }}/job-apply-bot-final-backend:${{ github.sha }}
 
       # Frontend
       - name: Build & push frontend
@@ -46,8 +47,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE_NS }}/job-apply-bot-final-frontend:latest
-            ${{ env.IMAGE_NS }}/job-apply-bot-final-frontend:${{ github.sha }}
+            ghcr.io/${{ env.OWNER_LC }}/job-apply-bot-final-frontend:latest
+            ghcr.io/${{ env.OWNER_LC }}/job-apply-bot-final-frontend:${{ github.sha }}
 
       # Playwright (optional)
       - name: Build & push playwright
@@ -57,14 +58,13 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE_NS }}/job-apply-bot-final-playwright:latest
-            ${{ env.IMAGE_NS }}/job-apply-bot-final-playwright:${{ github.sha }}
+            ghcr.io/${{ env.OWNER_LC }}/job-apply-bot-final-playwright:latest
+            ghcr.io/${{ env.OWNER_LC }}/job-apply-bot-final-playwright:${{ github.sha }}
 
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      # Upload current repo content to the server (so we don't need git access on the box)
       - name: Upload repo via SCP
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -74,7 +74,7 @@ jobs:
           port: ${{ secrets.SSH_PORT || 22 }}
           source: "./"
           target: ${{ secrets.DEPLOY_PATH }}
-          rm: true            # clean target before upload
+          rm: true
           overwrite: true
           strip_components: 0
           exclude: |
@@ -97,21 +97,18 @@ jobs:
             EMAIL="${{ secrets.EMAIL }}"
             cd "${{ secrets.DEPLOY_PATH }}"
 
-            # Install Docker if missing
             if ! command -v docker >/dev/null 2>&1; then
               curl -fsSL https://get.docker.com | sudo sh
             fi
 
-            # Login to GHCR if you keep packages private (optional)
+            # optional GHCR login if your packages are private
             if [ -n "${{ secrets.GHCR_USERNAME }}" ] && [ -n "${{ secrets.GHCR_TOKEN }}" ]; then
               echo "${{ secrets.GHCR_TOKEN }}" | sudo docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
             fi
 
-            # Pull & start using the prod override
             sudo docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
             sudo docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 
-            # First-run: issue TLS cert if not present, then reload nginx
             if ! sudo docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T frontend \
               test -f /etc/letsencrypt/live/${DOMAIN}/fullchain.pem; then
 
@@ -122,6 +119,5 @@ jobs:
               sudo docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T frontend nginx -s reload || true
             fi
 
-            # Health checks
             curl -I --max-time 10 "https://${DOMAIN}" || true
             curl -I --max-time 10 "https://${DOMAIN}/api/jobs" || true
