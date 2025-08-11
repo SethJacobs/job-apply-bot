@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "JobBot Autofill",
+  "version": "0.1.0",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "host_permissions": [
+    "<all_urls>"
+  ]
+}
