@@ -71,7 +71,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    # Prove the files are actually in the runner before SCP
     - name: Verify workspace contents
       run: |
         set -euxo pipefail
@@ -120,10 +119,12 @@ jobs:
           echo "➡ Compose files found:"
           find "$DEPLOY_PATH" -maxdepth 2 -type f -name 'docker-compose*.yml' -print || true
 
+          # Install Docker if missing
           if ! command -v docker >/dev/null 2>&1; then
             curl -fsSL https://get.docker.com | sudo sh
           fi
 
+          # Optional GHCR login if your packages are private
           if [ -n '${{ secrets.GHCR_USERNAME }}' ] && [ -n '${{ secrets.GHCR_TOKEN }}' ]; then
             echo '${{ secrets.GHCR_TOKEN }}' | sudo docker login ghcr.io -u '${{ secrets.GHCR_USERNAME }}' --password-stdin
           fi
@@ -133,13 +134,16 @@ jobs:
           sudo docker compose $COMPOSE pull
           sudo docker compose $COMPOSE up -d
 
+          # First-run cert issuance: override any entrypoint and run the certbot CLI directly
           if ! sudo docker compose $COMPOSE exec -T frontend test -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"; then
-            sudo docker compose $COMPOSE run --rm certbot \
-              certonly --webroot -w /var/www/certbot \
+            sudo docker compose $COMPOSE run --rm --entrypoint "" certbot \
+              certbot certonly --webroot -w /var/www/certbot \
               -d "${DOMAIN}" --email "${EMAIL}" --agree-tos --no-eff-email
+
             sudo docker compose $COMPOSE exec -T frontend nginx -s reload || true
           fi
 
+          # Health checks
           curl -I --max-time 10 "http://${DOMAIN}"  || true
           curl -I --max-time 10 "https://${DOMAIN}" || true
           curl -I --max-time 10 "https://${DOMAIN}/api/jobs" || true
