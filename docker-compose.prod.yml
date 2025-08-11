@@ -1,0 +1,41 @@
+version: "3.8"
+
+services:
+  backend:
+    image: ghcr.io/SethJacobs/job-apply-bot-final-backend:latest
+    expose: ["8080"]
+    environment:
+      - JAVA_OPTS=-Xms256m -Xmx512m
+      # add DB env if you move off H2
+    volumes:
+      - ./backend/data:/app/data
+    restart: unless-stopped
+
+  frontend:
+    image: ghcr.io/SethJacobs/job-apply-bot-final-frontend:latest
+    depends_on: [backend]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - certbot-www:/var/www/certbot
+      - letsencrypt:/etc/letsencrypt
+    restart: unless-stopped
+
+  playwright:
+    image: ghcr.io/SethJacobs/job-apply-bot-final-playwright:latest
+    expose: ["4000"]
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - certbot-www:/var/www/certbot
+      - letsencrypt:/etc/letsencrypt
+    entrypoint: sh
+    command: -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $!; done"
+    restart: unless-stopped
+
+volumes:
+  certbot-www:
+  letsencrypt:
