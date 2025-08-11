@@ -64,82 +64,84 @@ jobs:
           tags: |
             ghcr.io/${{ env.OWNER_LC }}/job-apply-bot-final-playwright:latest
             ghcr.io/${{ env.OWNER_LC }}/job-apply-bot-final-playwright:${{ github.sha }}
-
+            
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      - name: Upload repo via SCP
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          source: "./"
-          target: ${{ secrets.DEPLOY_PATH }}
-          rm: true
-          overwrite: true
-          strip_components: 0
-          exclude: |
-            **/.git**
-            **/node_modules/**
-            **/dist/**
-            **/*.log
+    - name: Upload repo via SCP
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USER }}
+        key: ${{ secrets.SSH_KEY }}
+        port: ${{ secrets.SSH_PORT || 22 }}
+        # Be explicit about what to upload
+        source: |
+          docker-compose.yml
+          docker-compose.prod.yml
+          frontend/**
+          backend/**
+          playwright-service/**
+        target: /home/ubuntu/job-apply-bot-final
+        rm: true
+        overwrite: true
+        strip_components: 0
+        debug: true
+        exclude: |
+          **/.git**
+          **/node_modules/**
+          **/dist/**
+          **/*.log
 
-      - name: SSH deploy
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          script_stop: true
-          script: |
-            set -euo pipefail
+    - name: SSH deploy
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USER }}
+        key: ${{ secrets.SSH_KEY }}
+        port: ${{ secrets.SSH_PORT || 22 }}
+        script_stop: true
+        script: |
+          set -euo pipefail
 
-            DOMAIN='${{ secrets.DOMAIN }}'
-            EMAIL='${{ secrets.EMAIL }}'
-            DEPLOY_PATH_RAW='${{ secrets.DEPLOY_PATH }}'
+          DOMAIN='${{ secrets.DOMAIN }}'
+          EMAIL='${{ secrets.EMAIL }}'
+          DEPLOY_PATH='/home/ubuntu/job-apply-bot-final'
 
-            # Sanitize DEPLOY_PATH: strip CRs and trailing whitespace/newlines
-            DEPLOY_PATH="$(printf '%s' "$DEPLOY_PATH_RAW" | tr -d '\r' | sed -e 's/[[:space:]]\+$//')"
-            echo "➡ DEPLOY_PATH: [$DEPLOY_PATH]"
+          echo "➡ Using DEPLOY_PATH: [$DEPLOY_PATH]"
+          sudo mkdir -p "$DEPLOY_PATH"
+          sudo chown "$USER":"$USER" "$DEPLOY_PATH"
 
-            # Ensure path exists and owned by current user
-            sudo mkdir -p "$DEPLOY_PATH"
-            sudo chown "$USER":"$USER" "$DEPLOY_PATH"
+          echo "➡ Listing DEPLOY_PATH:"
+          ls -la "$DEPLOY_PATH" || true
+          echo "➡ Compose files found:"
+          find "$DEPLOY_PATH" -maxdepth 2 -type f -name 'docker-compose*.yml' -print || true
 
-            echo "➡ Listing DEPLOY_PATH contents:"
-            ls -la "$DEPLOY_PATH" || true
-            echo "➡ Looking for compose files:"
-            find "$DEPLOY_PATH" -maxdepth 2 -type f -name 'docker-compose*.yml' -print || true
+          # Install Docker if missing
+          if ! command -v docker >/dev/null 2>&1; then
+            curl -fsSL https://get.docker.com | sudo sh
+          fi
 
-            # Install Docker (and Compose plugin) if missing
-            if ! command -v docker >/dev/null 2>&1; then
-              curl -fsSL https://get.docker.com | sudo sh
-            fi
+          # Optional GHCR login if your packages are private
+          if [ -n '${{ secrets.GHCR_USERNAME }}' ] && [ -n '${{ secrets.GHCR_TOKEN }}' ]; then
+            echo '${{ secrets.GHCR_TOKEN }}' | sudo docker login ghcr.io -u '${{ secrets.GHCR_USERNAME }}' --password-stdin
+          fi
 
-            # Optional GHCR login if your packages are private
-            if [ -n '${{ secrets.GHCR_USERNAME }}' ] && [ -n '${{ secrets.GHCR_TOKEN }}' ]; then
-              echo '${{ secrets.GHCR_TOKEN }}' | sudo docker login ghcr.io -u '${{ secrets.GHCR_USERNAME }}' --password-stdin
-            fi
+          COMPOSE="-f $DEPLOY_PATH/docker-compose.yml -f $DEPLOY_PATH/docker-compose.prod.yml"
 
-            # Use ABSOLUTE compose file paths (no reliance on cd)
-            COMPOSE="-f $DEPLOY_PATH/docker-compose.yml -f $DEPLOY_PATH/docker-compose.prod.yml"
+          sudo docker compose $COMPOSE pull
+          sudo docker compose $COMPOSE up -d
 
-            sudo docker compose $COMPOSE pull
-            sudo docker compose $COMPOSE up -d
+          # First-run certs (works with HTTP-only nginx bootstrap)
+          if ! sudo docker compose $COMPOSE exec -T frontend test -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"; then
+            sudo docker compose $COMPOSE run --rm certbot \
+              certonly --webroot -w /var/www/certbot \
+              -d "${DOMAIN}" --email "${EMAIL}" --agree-tos --no-eff-email
+            sudo docker compose $COMPOSE exec -T frontend nginx -s reload || true
+          fi
 
-            # First-run cert issuance (works with your HTTP-only bootstrap config)
-            if ! sudo docker compose $COMPOSE exec -T frontend test -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"; then
-              sudo docker compose $COMPOSE run --rm certbot \
-                certonly --webroot -w /var/www/certbot \
-                -d "${DOMAIN}" --email "${EMAIL}" --agree-tos --no-eff-email
-              sudo docker compose $COMPOSE exec -T frontend nginx -s reload || true
-            fi
-
-            # Health checks
-            curl -I --max-time 10 "http://${DOMAIN}"  || true
-            curl -I --max-time 10 "https://${DOMAIN}" || true
-            curl -I --max-time 10 "https://${DOMAIN}/api/jobs" || true
+          # Health checks
+          curl -I --max-time 10 "http://${DOMAIN}"  || true
+          curl -I --max-time 10 "https://${DOMAIN}" || true
+          curl -I --max-time 10 "https://${DOMAIN}/api/jobs" || true
