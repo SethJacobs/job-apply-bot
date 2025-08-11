@@ -7,10 +7,11 @@ on:
 
 permissions:
   contents: read
-  packages: write   # push to GHCR
+  packages: write
 
-env:
-  IMAGE_NS: ghcr.io/SethJacobs
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-push:
@@ -27,7 +28,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Backend
+      # Lowercase the owner for GHCR image paths (required)
+      - name: Compute lowercase owner
+        run: echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+
+      # Backend image
       - name: Build & push backend
         uses: docker/build-push-action@v5
         with:
@@ -35,10 +40,10 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE_NS }}/job-apply-bot-final-backend:latest
-            ${{ env.IMAGE_NS }}/job-apply-bot-final-backend:${{ github.sha }}
+            ghcr.io/${{ env.OWNER_LC }}/job-apply-bot-final-backend:latest
+            ghcr.io/${{ env.OWNER_LC }}/job-apply-bot-final-backend:${{ github.sha }}
 
-      # Frontend
+      # Frontend image
       - name: Build & push frontend
         uses: docker/build-push-action@v5
         with:
@@ -46,10 +51,10 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE_NS }}/job-apply-bot-final-frontend:latest
-            ${{ env.IMAGE_NS }}/job-apply-bot-final-frontend:${{ github.sha }}
+            ghcr.io/${{ env.OWNER_LC }}/job-apply-bot-final-frontend:latest
+            ghcr.io/${{ env.OWNER_LC }}/job-apply-bot-final-frontend:${{ github.sha }}
 
-      # Playwright (optional)
+      # Playwright image (optional)
       - name: Build & push playwright
         uses: docker/build-push-action@v5
         with:
@@ -57,71 +62,84 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ env.IMAGE_NS }}/job-apply-bot-final-playwright:latest
-            ${{ env.IMAGE_NS }}/job-apply-bot-final-playwright:${{ github.sha }}
-
+            ghcr.io/${{ env.OWNER_LC }}/job-apply-bot-final-playwright:latest
+            ghcr.io/${{ env.OWNER_LC }}/job-apply-bot-final-playwright:${{ github.sha }}
+            
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
-      # Upload current repo content to the server (so we don't need git access on the box)
-      - name: Upload repo via SCP
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          source: "./"
-          target: ${{ secrets.DEPLOY_PATH }}
-          rm: true            # clean target before upload
-          overwrite: true
-          strip_components: 0
-          exclude: |
-            **/.git**
-            **/node_modules/**
-            **/dist/**
-            **/*.log
+    - uses: actions/checkout@v4
 
-      - name: SSH deploy
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          script_stop: true
-          script: |
-            set -e
-            DOMAIN="${{ secrets.DOMAIN }}"
-            EMAIL="${{ secrets.EMAIL }}"
-            cd "${{ secrets.DEPLOY_PATH }}"
+    # Prove the files are actually in the runner before SCP
+    - name: Verify workspace contents
+      run: |
+        set -euxo pipefail
+        pwd
+        ls -la
+        find . -maxdepth 2 -name 'docker-compose*' -print
+        test -f docker-compose.yml
+        test -f docker-compose.prod.yml
 
-            # Install Docker if missing
-            if ! command -v docker >/dev/null 2>&1; then
-              curl -fsSL https://get.docker.com | sudo sh
-            fi
+    - name: Upload repo via SCP (send entire repo)
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USER }}
+        key: ${{ secrets.SSH_KEY }}
+        port: ${{ secrets.SSH_PORT || 22 }}
+        source: |
+          .
+        target: /home/ubuntu/job-apply-bot-final
+        rm: true
+        overwrite: true
+        strip_components: 0
+        debug: true
 
-            # Login to GHCR if you keep packages private (optional)
-            if [ -n "${{ secrets.GHCR_USERNAME }}" ] && [ -n "${{ secrets.GHCR_TOKEN }}" ]; then
-              echo "${{ secrets.GHCR_TOKEN }}" | sudo docker login ghcr.io -u "${{ secrets.GHCR_USERNAME }}" --password-stdin
-            fi
+    - name: SSH deploy
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.SSH_HOST }}
+        username: ${{ secrets.SSH_USER }}
+        key: ${{ secrets.SSH_KEY }}
+        port: ${{ secrets.SSH_PORT || 22 }}
+        script_stop: true
+        script: |
+          set -euo pipefail
 
-            # Pull & start using the prod override
-            sudo docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-            sudo docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+          DOMAIN='${{ secrets.DOMAIN }}'
+          EMAIL='${{ secrets.EMAIL }}'
+          DEPLOY_PATH='/home/ubuntu/job-apply-bot-final'
 
-            # First-run: issue TLS cert if not present, then reload nginx
-            if ! sudo docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T frontend \
-              test -f /etc/letsencrypt/live/${DOMAIN}/fullchain.pem; then
+          echo "➡ Using DEPLOY_PATH: [$DEPLOY_PATH]"
+          sudo mkdir -p "$DEPLOY_PATH"
+          sudo chown "$USER":"$USER" "$DEPLOY_PATH"
 
-              sudo docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm certbot \
-                certonly --webroot -w /var/www/certbot \
-                -d ${DOMAIN} --email ${EMAIL} --agree-tos --no-eff-email
+          echo "➡ Listing DEPLOY_PATH:"
+          ls -la "$DEPLOY_PATH" || true
+          echo "➡ Compose files found:"
+          find "$DEPLOY_PATH" -maxdepth 2 -type f -name 'docker-compose*.yml' -print || true
 
-              sudo docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T frontend nginx -s reload || true
-            fi
+          if ! command -v docker >/dev/null 2>&1; then
+            curl -fsSL https://get.docker.com | sudo sh
+          fi
 
-            # Health checks
-            curl -I --max-time 10 "https://${DOMAIN}" || true
-            curl -I --max-time 10 "https://${DOMAIN}/api/jobs" || true
+          if [ -n '${{ secrets.GHCR_USERNAME }}' ] && [ -n '${{ secrets.GHCR_TOKEN }}' ]; then
+            echo '${{ secrets.GHCR_TOKEN }}' | sudo docker login ghcr.io -u '${{ secrets.GHCR_USERNAME }}' --password-stdin
+          fi
+
+          COMPOSE="-f $DEPLOY_PATH/docker-compose.yml -f $DEPLOY_PATH/docker-compose.prod.yml"
+
+          sudo docker compose $COMPOSE pull
+          sudo docker compose $COMPOSE up -d
+
+          if ! sudo docker compose $COMPOSE exec -T frontend test -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"; then
+            sudo docker compose $COMPOSE run --rm certbot \
+              certonly --webroot -w /var/www/certbot \
+              -d "${DOMAIN}" --email "${EMAIL}" --agree-tos --no-eff-email
+            sudo docker compose $COMPOSE exec -T frontend nginx -s reload || true
+          fi
+
+          curl -I --max-time 10 "http://${DOMAIN}"  || true
+          curl -I --max-time 10 "https://${DOMAIN}" || true
+          curl -I --max-time 10 "https://${DOMAIN}/api/jobs" || true
