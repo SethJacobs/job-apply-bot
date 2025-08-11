@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   backend:
-    image: ghcr.io/SethJacobs/job-apply-bot-final-backend:latest
+    image: ghcr.io/sethjacobs/job-apply-bot-final-backend:latest
     expose: ["8080"]
     environment:
       - JAVA_OPTS=-Xms256m -Xmx512m
@@ -12,7 +12,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    image: ghcr.io/SethJacobs/job-apply-bot-final-frontend:latest
+    image: ghcr.io/sethjacobs/job-apply-bot-final-frontend:latest
     depends_on: [backend]
     ports:
       - "80:80"
@@ -23,7 +23,7 @@ services:
     restart: unless-stopped
 
   playwright:
-    image: ghcr.io/SethJacobs/job-apply-bot-final-playwright:latest
+    image: ghcr.io/sethjacobs/job-apply-bot-final-playwright:latest
     expose: ["4000"]
     restart: unless-stopped
 
