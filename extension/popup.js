@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:8080/api';
+const API_BASE = 'https://141-148-52-32.sslip.io/api';
 
 const statusEl=document.getElementById('status');
 const usernameEl=document.getElementById('username');

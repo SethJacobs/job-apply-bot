@@ -22,12 +22,12 @@ interface Job {
 interface User { name: string; }
 interface Profile {
   name: string;
-  resume: string;         // maps to backend "resumeText"
-  coverLetter: string;    // not used by backend; we keep it in UI only
+  resume: string;          // maps to backend resumeText
+  coverLetter: string;     // local-only (not sent to backend)
   email: string;
-  links: { url: string; label: string; }[];
   phone: string;
   location: string;
+  links: string[];         // backend expects array; we edit as textarea/CSV
 }
 type ProfileId = number | null;
 
@@ -89,12 +89,28 @@ function AuthPanel({ onAuthed }: { onAuthed: (user: User, token: string) => void
 }
 
 // ---------- Profile Form ----------
-function ProfileForm({ profile, onChange, onSave, saving }:{
+function ProfileForm({
+  profile, onChange, onSave, saving,
+}:{
   profile: Profile; onChange: (p: Profile) => void; onSave: () => Promise<void> | void; saving: boolean;
 }) {
-  const onField = useCallback((key: keyof Profile) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-      onChange({ ...profile, [key]: e.target.value }), [onChange, profile]);
+  const onField = useCallback(
+    (key: keyof Omit<Profile, "links">) =>
+      (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+        onChange({ ...profile, [key]: e.target.value }),
+    [onChange, profile]
+  );
+
+  // Links edited as textarea: one per line or comma separated
+  const linksText = profile.links.join("\n");
+  const onLinksChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const raw = e.target.value;
+    const parts = raw.split(/\r?\n|,/).map(s => s.trim()).filter(Boolean);
+    onChange({ ...profile, links: parts });
+  };
+
+  const clearAll = () =>
+    onChange({ name: "", resume: "", coverLetter: "", email: "", phone: "", location: "", links: [] });
 
   return (
     <section aria-labelledby="profile-heading" style={box}>
@@ -102,19 +118,28 @@ function ProfileForm({ profile, onChange, onSave, saving }:{
       <div style={stackY(12)}>
         <label style={labelStyle} htmlFor="full-name">Full name</label>
         <input id="full-name" style={input} placeholder="Full name" value={profile.name} onChange={onField("name")} />
-        <label style={labelStyle} htmlFor="resume">Resume</label>
-        <textarea id="resume" style={{ ...input, minHeight: 120, resize: "vertical" }} placeholder="Paste or write your resume text" value={profile.resume} onChange={onField("resume")} />
-        <label style={labelStyle} htmlFor="cover-letter">Cover letter (local only)</label>
-        <textarea id="cover-letter" style={{ ...input, minHeight: 120, resize: "vertical" }} placeholder="(Not stored on server)" value={profile.coverLetter} onChange={onField("coverLetter")} />
-        <label style={labelStyle} htmlFor="links">Links</label>
-        <input id="links" style={input} placeholder="LinkedIn, GitHub, etc." value={profile.links} onChange={onField("links")} />
-        <label style={labelStyle} htmlFor="location">Location</label>
-        <input id="location" style={input} placeholder="City, Country" value={profile.location} onChange={onField("location")} />
+
+        <label style={labelStyle} htmlFor="email">Email</label>
+        <input id="email" style={input} placeholder="Email" value={profile.email} onChange={onField("email")} />
+
         <label style={labelStyle} htmlFor="phone">Phone</label>
         <input id="phone" style={input} placeholder="Phone number" value={profile.phone} onChange={onField("phone")} />
+
+        <label style={labelStyle} htmlFor="location">Location</label>
+        <input id="location" style={input} placeholder="City, Country" value={profile.location} onChange={onField("location")} />
+
+        <label style={labelStyle} htmlFor="links">Links (one per line or comma-separated)</label>
+        <textarea id="links" style={{ ...input, minHeight: 96, resize: "vertical" }} value={linksText} onChange={onLinksChange} />
+
+        <label style={labelStyle} htmlFor="resume">Resume</label>
+        <textarea id="resume" style={{ ...input, minHeight: 120, resize: "vertical" }} placeholder="Paste your resume text" value={profile.resume} onChange={onField("resume")} />
+
+        <label style={labelStyle} htmlFor="cover-letter">Cover letter (local only)</label>
+        <textarea id="cover-letter" style={{ ...input, minHeight: 120, resize: "vertical" }} placeholder="Not stored on server" value={profile.coverLetter} onChange={onField("coverLetter")} />
+
         <div style={{ display: "flex", gap: 8 }}>
           <button style={btn} onClick={onSave} disabled={saving} aria-disabled={saving}>{saving ? "Saving…" : "Save Profile"}</button>
-          <button type="button" style={btnSecondary} onClick={() => onChange({ name: "", resume: "", coverLetter: "" })} disabled={saving}>Clear</button>
+          <button type="button" style={btnSecondary} onClick={clearAll} disabled={saving}>Clear</button>
         </div>
       </div>
     </section>
@@ -134,7 +159,6 @@ function JobList({ jobs }: { jobs: Job[] }) {
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <a href={j.url} target="_blank" rel="noreferrer" style={{ ...btnSecondary, display: "inline-block", textDecoration: "none" }}>Open</a>
-            {/* No /apply endpoint in backend; removed Apply button */}
           </div>
         </li>
       ))}
@@ -148,7 +172,9 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<Profile>({ name: "", resume: "", coverLetter: "" });
+  const [profile, setProfile] = useState<Profile>({
+    name: "", resume: "", coverLetter: "", email: "", phone: "", location: "", links: []
+  });
   const [profileId, setProfileId] = useState<ProfileId>(null);
   const [savingProfile, setSavingProfile] = useState(false);
 
@@ -159,7 +185,7 @@ export default function App() {
     if (token && username) setUser({ name: username });
   }, []);
 
-  // After login, load profile (via /api/profiles/current) and jobs (/api/jobs)
+  // After login, load profile and jobs
   useEffect(() => {
     if (!user) return;
     const controller = new AbortController();
@@ -170,20 +196,24 @@ export default function App() {
         setLoading(true);
         setError(null);
 
-        // 1) Current profile
+        // Current profile
         try {
           const { data } = await api.get<any>("/profiles/current", { signal: controller.signal });
           if (mounted && data && !data.error) {
             setProfile({
               name: data.name ?? "",
-              resume: data.resumeText ?? "",   // backend key -> frontend field
-              coverLetter: "",                 // not stored on server
+              resume: data.resumeText ?? "",
+              coverLetter: "",
+              email: data.email ?? "",
+              phone: data.phone ?? "",
+              location: data.location ?? "",
+              links: Array.isArray(data.links) ? data.links.filter((s: any) => typeof s === "string") : [],
             });
             if (typeof data.id === "number") setProfileId(data.id);
           }
         } catch { /* no current profile yet */ }
 
-        // 2) Jobs list
+        // Jobs
         const jobsRes = await api.get<Job[]>("/jobs", { signal: controller.signal });
         if (mounted) setJobs(Array.isArray(jobsRes.data) ? jobsRes.data : []);
       } catch (err) {
@@ -198,21 +228,21 @@ export default function App() {
     return () => { mounted = false; controller.abort(); };
   }, [user]);
 
-  // Save profile -> POST /api/profiles (no id) or PUT /api/profiles/{id}
+  // Save profile -> POST or PUT
   const handleProfileSave = useCallback(async () => {
     try {
       setSavingProfile(true);
       const payload = {
         name: profile.name,
         resumeText: profile.resume,
-        phone: profile.phone,          // backend supports phone/location/links; send empty for now
+        email: profile.email,
+        phone: profile.phone,
         location: profile.location,
-        links: profile.links,          // backend expects object (it parses JSON)
+        links: profile.links, // array of strings
       };
 
       if (profileId == null) {
         await api.post("/profiles", payload);
-        // refresh id & current data
         const { data } = await api.get<any>("/profiles/current");
         if (data && typeof data.id === "number") setProfileId(data.id);
       } else {
@@ -233,7 +263,7 @@ export default function App() {
     localStorage.removeItem("username");
     setUser(null);
     setJobs([]);
-    setProfile({ name: "", resume: "", coverLetter: "" });
+    setProfile({ name: "", resume: "", coverLetter: "", email: "", phone: "", location: "", links: [] });
     setProfileId(null);
   }, []);
 
