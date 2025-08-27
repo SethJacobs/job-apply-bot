@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>Form Filler - Settings</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f8f9fa;
+      line-height: 1.5;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+    }
+
+    .header {
+      background: #007bff;
+      color: white;
+      padding: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .header h1 {
+      margin: 0;
+      font-size: 24px;
+    }
+
+    .profile-selector {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .profile-selector select {
+      padding: 8px 12px;
+      border: none;
+      border-radius: 4px;
+      background: white;
+    }
+
+    .content {
+      padding: 20px;
+    }
+
+    .form-section {
+      margin-bottom: 30px;
+      border: 1px solid #e9ecef;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .section-header {
+      background: #f8f9fa;
+      padding: 15px 20px;
+      border-bottom: 1px solid #e9ecef;
+      font-weight: 600;
+      color: #495057;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .section-header:hover {
+      background: #e9ecef;
+    }
+
+    .section-content {
+      padding: 20px;
+      display: none;
+    }
+
+    .section-content.active {
+      display: block;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 15px;
+    }
+
+    .form-group {
+      flex: 1;
+    }
+
+    .form-group.full-width {
+      flex: 100%;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 500;
+      color: #495057;
+    }
+
+    input,
+    textarea,
+    select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ced4da;
+      border-radius: 4px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+
+    input:focus,
+    textarea:focus,
+    select:focus {
+      outline: none;
+      border-color: #007bff;
+      box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .file-input-wrapper {
+      position: relative;
+      display: inline-block;
+      width: 100%;
+    }
+
+    .file-input {
+      position: absolute;
+      opacity: 0;
+      width: 100%;
+      height: 100%;
+      cursor: pointer;
+    }
+
+    .file-input-display {
+      padding: 10px;
+      border: 2px dashed #ced4da;
+      border-radius: 4px;
+      text-align: center;
+      background: #f8f9fa;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .file-input-display:hover {
+      border-color: #007bff;
+      background: #e3f2fd;
+    }
+
+    .file-input-display.has-file {
+      border-style: solid;
+      border-color: #28a745;
+      background: #d4edda;
+    }
+
+    .dynamic-list {
+      border: 1px solid #e9ecef;
+      border-radius: 4px;
+      padding: 15px;
+      background: #f8f9fa;
+    }
+
+    .list-item {
+      background: white;
+      border: 1px solid #e9ecef;
+      border-radius: 4px;
+      padding: 15px;
+      margin-bottom: 10px;
+      position: relative;
+    }
+
+    .list-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .remove-item {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: #dc3545;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+
+    .add-item {
+      background: #28a745;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    .actions {
+      padding: 20px;
+      background: #f8f9fa;
+      border-top: 1px solid #e9ecef;
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background-color 0.2s;
+    }
+
+    .btn-primary {
+      background: #007bff;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: #0056b3;
+    }
+
+    .btn-secondary {
+      background: #6c757d;
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      background: #545b62;
+    }
+
+    .btn-danger {
+      background: #dc3545;
+      color: white;
+    }
+
+    .btn-danger:hover {
+      background: #c82333;
+    }
+
+    .status {
+      padding: 10px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+      text-align: center;
+      display: none;
+    }
+
+    .status.success {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+
+    .status.error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+
+    .toggle-icon {
+      transition: transform 0.2s;
+    }
+
+    .toggle-icon.rotated {
+      transform: rotate(180deg);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Form Filler Settings</h1>
+      <div class="profile-selector">
+        <select id="profileSelect">
+          <option value="">New Profile</option>
+        </select>
+        <button id="newProfile" class="btn btn-secondary">New</button>
+        <button id="deleteProfile" class="btn btn-danger" style="display: none;">Delete</button>
+      </div>
+    </div>
+
+    <div class="content">
+      <div id="status" class="status"></div>
+
+      <!-- Profile Name -->
+      <div class="form-section">
+        <div class="section-header" data-section="profile">
+          <span>Profile Information</span>
+          <span class="toggle-icon">▼</span>
+        </div>
+        <div class="section-content active" id="profile-section">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="profileName">Profile Name *</label>
+              <input type="text" id="profileName" placeholder="e.g., Work Profile, Personal Profile">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Personal Information -->
+      <div class="form-section">
+        <div class="section-header" data-section="personal">
+          <span>Personal Information</span>
+          <span class="toggle-icon">▼</span>
+        </div>
+        <div class="section-content" id="personal-section">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="firstName">First Name</label>
+              <input type="text" id="firstName">
+            </div>
+            <div class="form-group">
+              <label for="lastName">Last Name</label>
+              <input type="text" id="lastName">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="fullName">Full Name</label>
+              <input type="text" id="fullName">
+            </div>
+            <div class="form-group">
+              <label for="email">Email</label>
+              <input type="email" id="email">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="phone">Phone</label>
+              <input type="tel" id="phone">
+            </div>
+            <div class="form-group">
+              <label for="dateOfBirth">Date of Birth</label>
+              <input type="date" id="dateOfBirth">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Address Information -->
+      <div class="form-section">
+        <div class="section-header" data-section="address">
+          <span>Address Information</span>
+          <span class="toggle-icon">▼</span>
+        </div>
+        <div class="section-content" id="address-section">
+          <div class="form-row">
+            <div class="form-group full-width">
+              <label for="street">Street Address</label>
+              <input type="text" id="street">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="city">City</label>
+              <input type="text" id="city">
+            </div>
+            <div class="form-group">
+              <label for="state">State/Province</label>
+              <input type="text" id="state">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="zipCode">ZIP/Postal Code</label>
+              <input type="text" id="zipCode">
+            </div>
+            <div class="form-group">
+              <label for="country">Country</label>
+              <input type="text" id="country" value="United States">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resume & Documents -->
+      <div class="form-section">
+        <div class="section-header" data-section="documents">
+          <span>Resume & Documents</span>
+          <span class="toggle-icon">▼</span>
+        </div>
+        <div class="section-content" id="documents-section">
+          <div class="form-row">
+            <div class="form-group full-width">
+              <label for="resume">Resume (PDF, DOC, DOCX)</label>
+              <div class="file-input-wrapper">
+                <input type="file" id="resume" class="file-input" accept=".pdf,.doc,.docx">
+                <div class="file-input-display" id="resumeDisplay">
+                  Click to select resume file or drag and drop
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group full-width">
+              <label for="coverLetter">Cover Letter Template</label>
+              <textarea id="coverLetter" rows="6" placeholder="Your cover letter template..."></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Professional Links -->
+      <div class="form-section">
+        <div class="section-header" data-section="links">
+          <span>Professional Links</span>
+          <span class="toggle-icon">▼</span>
+        </div>
+        <div class="section-content" id="links-section">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="linkedin">LinkedIn Profile</label>
+              <input type="url" id="linkedin" placeholder="https://linkedin.com/in/yourname">
+            </div>
+            <div class="form-group">
+              <label for="github">GitHub Profile</label>
+              <input type="url" id="github" placeholder="https://github.com/yourusername">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="portfolio">Portfolio Website</label>
+              <input type="url" id="portfolio" placeholder="https://yourportfolio.com">
+            </div>
+            <div class="form-group">
+              <label for="website">Personal Website</label>
+              <input type="url" id="website" placeholder="https://yourwebsite.com">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Work Experience -->
+      <div class="form-section">
+        <div class="section-header" data-section="experience">
+          <span>Work Experience</span>
+          <span class="toggle-icon">▼</span>
+        </div>
+        <div class="section-content" id="experience-section">
+          <div class="dynamic-list" id="experienceList">
+            <!-- Experience items will be added here -->
+          </div>
+          <button type="button" class="add-item" id="addExperience">+ Add Experience</button>
+        </div>
+      </div>
+
+      <!-- Education -->
+      <div class="form-section">
+        <div class="section-header" data-section="education">
+          <span>Education</span>
+          <span class="toggle-icon">▼</span>
+        </div>
+        <div class="section-content" id="education-section">
+          <div class="dynamic-list" id="educationList">
+            <!-- Education items will be added here -->
+          </div>
+          <button type="button" class="add-item" id="addEducation">+ Add Education</button>
+        </div>
+      </div>
+
+      <!-- Skills -->
+      <div class="form-section">
+        <div class="section-header" data-section="skills">
+          <span>Skills</span>
+          <span class="toggle-icon">▼</span>
+        </div>
+        <div class="section-content" id="skills-section">
+          <div class="form-row">
+            <div class="form-group full-width">
+              <label for="skills">Skills (comma-separated)</label>
+              <textarea id="skills" rows="4" placeholder="JavaScript, Python, React, Node.js, SQL, etc."></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Emergency Contact -->
+      <div class="form-section">
+        <div class="section-header" data-section="emergency">
+          <span>Emergency Contact</span>
+          <span class="toggle-icon">▼</span>
+        </div>
+        <div class="section-content" id="emergency-section">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="emergencyName">Contact Name</label>
+              <input type="text" id="emergencyName">
+            </div>
+            <div class="form-group">
+              <label for="emergencyPhone">Contact Phone</label>
+              <input type="tel" id="emergencyPhone">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="emergencyRelationship">Relationship</label>
+              <input type="text" id="emergencyRelationship" placeholder="e.g., Spouse, Parent, Sibling">
+            </div>
+            <div class="form-group">
+              <label for="emergencyEmail">Contact Email</label>
+              <input type="email" id="emergencyEmail">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Custom Fields -->
+      <div class="form-section">
+        <div class="section-header" data-section="custom">
+          <span>Custom Fields</span>
+          <span class="toggle-icon">▼</span>
+        </div>
+        <div class="section-content" id="custom-section">
+          <p style="margin-bottom: 15px; color: #666; font-size: 14px;">
+            Add custom fields that you frequently encounter on job applications. 
+            For each field, specify the label and value, and optionally provide CSS selectors to help the extension find the field.
+          </p>
+          <div class="dynamic-list" id="customFieldsList">
+            <!-- Custom field items will be added here -->
+          </div>
+          <button type="button" class="add-item" id="addCustomField">+ Add Custom Field</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
+      <button type="button" class="btn btn-primary" id="saveBtn">Save Profile</button>
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+
+</html>

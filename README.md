@@ -1,236 +1,226 @@
-# Job Apply Bot — Final Scaffold
+# Universal Form Filler Extension
 
-A full-stack job application helper with a Playwright-based scraper, a Spring Boot API, and a React (Vite) frontend served by Nginx. Includes a Chrome extension for one‑click profile autofill.
+A Chrome extension that automatically fills any form with your saved information, including resume uploads and comprehensive personal data. **No backend required** - everything works locally in your browser.
 
 ---
 
 ## ✨ Features
 
-* **Auth**: `POST /api/auth/register`, `POST /api/auth/login` (token-based)
-* **Profiles**: `GET /api/profiles/current`, `POST /api/profiles`, `PUT /api/profiles/{id}`
-* **Jobs**: `GET /api/jobs`, `GET /api/jobs/{id}`
-* **Frontend**: React app (built with Vite) served by **Nginx**, proxies `/api` to Spring
-* **Scraper**: Playwright microservice (optional)
-* **Chrome Extension**: login, fetch profile(s), autofill common fields on job sites
+* **Complete Local Storage**: No backend required - all data stored locally in your browser
+* **Universal Form Filling**: Works on any website with form fields
+* **Resume Upload Support**: Store and automatically upload your resume files
+* **Comprehensive Data Management**: Store personal info, work experience, education, skills, and more
+* **Multiple Profiles**: Create different profiles for different purposes (work, personal, etc.)
+* **Smart Field Detection**: Automatically detects and fills various form field types
+* **Drag & Drop Resume Upload**: Easy file management for your documents
 
 ---
 
 ## 🧱 Architecture
 
 ```
-[ Browser ] ──▶ https://app.example.com
-                   ├── SPA (Nginx serves /)
-                   └── /api → proxy_pass → backend:8080 (Spring Boot)
+[ Browser Extension ] ──▶ Chrome Local Storage
+                            ├── Profile Data (JSON)
+                            ├── Resume Files (Base64)
+                            └── Settings & Preferences
 
-Docker Compose services:
-- backend   (Spring Boot, H2 or external DB)
-- frontend  (Nginx + static build, /api proxy)
-- playwright (optional scraper API)
-- certbot   (prod, for TLS renewals when deployed to a server)
+No external services required!
 ```
 
 ---
 
-## 🚀 Quick Start (Local, Docker Compose)
+## 🚀 Quick Start
 
-1. **Unzip/clone** and `cd` into the project.
-2. **Build & run**
-
-   ```bash
-   docker compose up --build
-   ```
-3. **Services**
-
-   * Frontend (SPA): [http://localhost:3000](http://localhost:3000)
-   * Backend (API):  [http://localhost:8080](http://localhost:8080)
-   * Playwright:     [http://localhost:4000](http://localhost:4000) (optional)
-
-> The frontend’s Nginx proxies **`/api/*` → `backend:8080`**. Your React app can use relative `/api` URLs in local and prod.
+1. **Load the extension in Chrome**:
+   - Open Chrome and go to `chrome://extensions/`
+   - Enable "Developer mode" in the top right
+   - Click "Load unpacked" and select the `extension` folder
+2. **Set up your profile**:
+   - Click the extension icon and select "Settings"
+   - Fill out your information and upload your resume
+   - Save your profile
+3. **Start filling forms**:
+   - Navigate to any form
+   - Click the extension icon, select your profile, and click "Fill Current Form"
 
 ---
 
-## 🧪 Using the App
+## 📋 What Information Can Be Stored
 
-1. Open **[http://localhost:3000](http://localhost:3000)**.
-2. **Register** or **Login** via the UI (calls `/api/auth/register` or `/api/auth/login`).
-3. After login, the app loads **jobs** (`/api/jobs`) and your **profile** (`/api/profiles/current`).
-4. Edit your profile and **Save**:
+### Personal Information
+- First/Last Name, Full Name
+- Email, Phone Number
+- Date of Birth
+- Complete Address (Street, City, State, ZIP, Country)
 
-   * First save: `POST /api/profiles`
-   * Later saves: `PUT /api/profiles/{id}`
+### Professional Information
+- LinkedIn, GitHub, Portfolio, and Personal Website URLs
+- Work Experience (Company, Position, Dates, Description)
+- Education (Institution, Degree, Field of Study, Graduation Year)
+- Skills (comma-separated list)
 
----
+### Documents
+- Resume files (PDF, DOC, DOCX)
+- Cover letter templates
 
-## 🧩 Chrome Extension (Local Testing)
-
-1. In `extension/popup.js`, set during local dev:
-
-   ```js
-   const API_BASE = 'http://localhost:8080/api';
-   ```
-
-   In production, use your domain (see below), e.g. `https://app.example.com/api`.
-2. Load the extension in Chrome:
-
-   * Visit `chrome://extensions` → **Developer mode** → **Load unpacked** → select the extension folder (contains `manifest.json`).
-   * Click the extension icon, **Login/Register**, then **Reload Profiles** and **Autofill** on an application page.
+### Emergency Contact
+- Contact Name, Phone, Email
+- Relationship to you
 
 ---
 
-## ⚙️ Environment Variables
+## 🧪 Using the Extension
 
-### Frontend (Vite)
+### Setting Up Your Profile
+1. Click the extension icon in your Chrome toolbar
+2. Click "Settings" to open the options page
+3. Fill out the comprehensive form with your information:
+   - **Profile Information**: Give your profile a name
+   - **Personal Information**: Basic contact details
+   - **Address Information**: Complete address
+   - **Resume & Documents**: Upload your resume and add cover letter template
+   - **Professional Links**: LinkedIn, GitHub, portfolio URLs
+   - **Work Experience**: Add multiple work experiences
+   - **Education**: Add your educational background
+   - **Skills**: List your skills (comma-separated)
+   - **Emergency Contact**: Emergency contact information
+4. Click "Save Profile"
 
-* **Prod** (optional): set a base URL if you don’t use Nginx path proxying.
+### Filling Forms
+1. Navigate to any website with a form (job applications, contact forms, etc.)
+2. Click the extension icon
+3. Select your profile from the dropdown
+4. Click "Fill Current Form"
+5. The extension will automatically detect and fill matching fields
+6. Review the filled information and submit the form
 
-  ```env
-  VITE_API_BASE_URL=/api
-  # or absolute:
-  # VITE_API_BASE_URL=https://app.example.com/api
-  ```
+### Managing Multiple Profiles
+- Create different profiles for different contexts (e.g., "Job Applications", "Personal Forms")
+- Switch between profiles easily from the popup
+- Edit existing profiles by selecting them and clicking "Settings"
+- Delete profiles you no longer need
 
-### Backend (Spring)
+---
 
-* Configure DB if not using H2. Example (Postgres):
+## 🎯 Supported Form Fields
 
-  ```properties
-  spring.datasource.url=jdbc:postgresql://HOST:5432/DB
-  spring.datasource.username=USER
-  spring.datasource.password=PASS
-  spring.jpa.hibernate.ddl-auto=update
-  ```
+The extension automatically detects and fills:
 
-### CORS (Spring) — recommended
+- **Name fields**: first name, last name, full name
+- **Contact information**: email, phone number
+- **Address fields**: street address, city, state, ZIP code, country
+- **Professional links**: LinkedIn, GitHub, portfolio, personal website
+- **Work experience**: company names, job titles, descriptions
+- **Education**: schools, degrees, fields of study
+- **Skills**: skills text areas and input fields
+- **Date fields**: birth dates, employment dates, graduation years
+- **File uploads**: resume upload fields (automatically selects your stored resume)
 
-```java
-registry.addMapping("/api/**")
-  .allowedOriginPatterns("*") // lock down to your SPA origin in prod
-  .allowedMethods("GET","POST","PUT","DELETE","OPTIONS")
-  .allowedHeaders("Authorization","Content-Type")
-  .allowCredentials(false);
+---
+
+## 🔒 Privacy & Security
+
+- **100% Local**: All your data is stored locally in your browser using Chrome's secure storage APIs
+- **No External Servers**: No data is sent to any external services or servers
+- **Your Control**: You can export, import, or delete your data at any time
+- **Secure Storage**: Uses Chrome's encrypted local storage
+- **No Tracking**: The extension doesn't track your usage or collect analytics
+
+---
+
+## 📁 File Upload Feature
+
+When forms have file upload fields for resumes:
+- The extension detects resume upload fields automatically
+- Your stored resume file will be ready for upload
+- Supports PDF, DOC, and DOCX formats
+- Files are stored securely as base64 data in local storage
+- Drag and drop interface for easy file management
+
+---
+
+## 🛠️ Technical Details
+
+### Extension Structure
+```
+extension/
+├── manifest.json       # Extension configuration
+├── popup.html         # Main popup interface
+├── popup.js          # Popup functionality
+├── options.html      # Settings page
+├── options.js        # Settings functionality
+└── icons/           # Extension icons
 ```
 
----
-
-## 🛠️ Nginx Config (Frontend container)
-
-**Key rule:** keep `/api` prefix when proxying — *no trailing slash* in `proxy_pass`.
-
-```nginx
-location /api/ {
-  proxy_pass http://backend:8080; # no trailing slash
-  proxy_http_version 1.1;
-  proxy_set_header Host $host;
-  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+### Storage Format
+Data is stored in Chrome's local storage as JSON objects:
+```json
+{
+  "profiles": {
+    "profile_123456": {
+      "name": "Work Profile",
+      "personal": { ... },
+      "address": { ... },
+      "documents": { ... },
+      "links": { ... },
+      "experience": [ ... ],
+      "education": [ ... ],
+      "skills": [ ... ],
+      "emergencyContact": { ... }
+    }
+  }
 }
-location / { try_files $uri $uri/ /index.html; }
 ```
 
-Common pitfall: if you write `proxy_pass http://backend:8080/;` (with slash), Nginx strips `/api` and your Spring routes 404.
-
 ---
 
-## ☁️ Production Deploy (Oracle Cloud “Always Free”, one box)
+## 🚀 Publishing to Chrome Web Store
 
-1. Create an **Ampere A1** VM (Ubuntu), open ports **80/443**, point DNS: `app.example.com` → VM IP.
-2. Install Docker & Compose, clone repo, then:
-
-   ```bash
-   docker compose up -d --build
-   # one-time cert issuance
-   docker compose run --rm certbot certonly \
-     --webroot -w /var/www/certbot \
-     -d app.example.com \
-     --email you@example.com --agree-tos --no-eff-email
-   docker compose exec frontend nginx -s reload
-   ```
-3. Your app should be live at **[https://app.example.com](https://app.example.com)**. The SPA uses relative `/api`, which Nginx proxies to the backend container.
-4. **Chrome extension**: set `API_BASE = 'https://app.example.com/api'` and publish.
-
----
-
-## 🧾 API Endpoints (from controllers)
-
-* **Auth**
-
-  * `POST /api/auth/register` `{ username, password } → { token }`
-  * `POST /api/auth/login`    `{ username, password } → { token }`
-* **Profiles**
-
-  * `GET  /api/profiles/current` → `{ id, name, resumeText, ... }`
-  * `POST /api/profiles` `{ name, resumeText, phone, location, links }`
-  * `PUT  /api/profiles/{id}` same payload as POST
-* **Jobs**
-
-  * `GET /api/jobs` → array of job postings
-  * `GET /api/jobs/{id}` → details
-
-> Frontend maps `resume` ⇄ `resumeText` to match the backend model.
-
----
-
-## 🧰 Useful Commands
-
-```bash
-# build and start
-docker compose up -d --build
-
-# live logs
-docker compose logs -f frontend backend
-
-# restart after config change
-docker compose restart frontend
-
-# curl sanity checks
-curl -i http://localhost:3000/api/jobs
-curl -i http://localhost:8080/api/jobs
-```
+1. Create a Chrome Web Store developer account (one-time $5 fee)
+2. Zip the extension folder
+3. Upload to the Chrome Web Store
+4. Fill out the store listing with screenshots and description
+5. Submit for review
 
 ---
 
 ## 🐞 Troubleshooting
 
-* **GET/POST /api/* returns 404*\*
+### Extension Not Working
+- Make sure you've loaded the extension in Developer Mode
+- Check that you have at least one profile created
+- Verify the website allows form filling (some sites block it)
 
-  * Check Nginx: `proxy_pass http://backend:8080;` (no slash)
-  * Confirm Spring route exists (e.g., `/api/profiles/current`).
-* **CORS errors in the extension**
+### Forms Not Filling
+- The extension uses intelligent field detection but may not catch all custom fields
+- Try different field names or contact the developer for improvements
+- Some websites use complex form structures that may not be supported
 
-  * Ensure backend/Nginx sends `Access-Control-Allow-Origin` (use `*` for token auth only) and allows `Authorization, Content-Type`.
-* **Nginx error: unknown "connection\_upgrade" variable**
-
-  * Remove the `Connection $connection_upgrade` line or define a `map` in the `http` context.
-* **Docker on ARM (Oracle)**
-
-  * Use arm64-friendly base images (`node:18`, `nginx:stable-alpine`, `eclipse-temurin`). Build on the VM or with `buildx`.
+### File Upload Issues
+- Make sure your resume file is in PDF, DOC, or DOCX format
+- File size should be reasonable (under 10MB)
+- Some websites may not support programmatic file selection
 
 ---
 
 ## 📦 Repository Structure
 
 ```
-backend/
-frontend/
-  ├─ Dockerfile
-  └─ nginx.conf
-playwright-service/
-docker-compose.yml
 extension/
-  ├─ manifest.json
-  ├─ popup.html
-  └─ popup.js
+├── manifest.json     # Extension manifest
+├── popup.html       # Main popup UI
+├── popup.js         # Popup logic
+├── options.html     # Settings page UI
+├── options.js       # Settings page logic
+└── icons/          # Extension icons
+    ├── 16.png
+    ├── 32.png
+    ├── 48.png
+    └── 128.png
 ```
-
----
-
-## 📚 Publishing the Chrome Extension (free extension)
-
-1. Create a Chrome Web Store **developer account** (one‑time \$5 fee).
-2. Bump `manifest.json` version, set `API_BASE` to your HTTPS API.
-3. Zip the extension folder (manifest + assets), upload, fill listing, submit for review.
 
 ---
 
 ## 📝 License
 
-MIT (or your choice). Update this section accordingly.
+MIT License - feel free to modify and distribute as needed.
